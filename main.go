@@ -11,13 +11,16 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-func ConnectDb() {
+var mydb = ConnectDb()
+
+func ConnectDb() *sql.DB {
+
+	fmt.Println("Start")
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Println("Start")
 	db, err := sql.Open("mysql",
 		fmt.Sprintf("%s:%s@tcp(%s:%s)/%s",
 			os.Getenv("MYSQL_USER"),
@@ -27,28 +30,35 @@ func ConnectDb() {
 			os.Getenv("MYSQL_DB"),
 		))
 
-	defer db.Close()
-
 	if err != nil {
 		log.Fatal(err)
 	}
+	return db
+}
 
+func Ping(c *gin.Context) {
 	var version string
-	err = db.QueryRow("select version()").Scan(&version)
+	err := mydb.QueryRow("select version()").Scan(&version)
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	fmt.Println(version)
+
+	c.JSON(200, gin.H{
+		"message": version,
+	})
 }
 
+// register user
+// login
+// generate jwt
+// validate jwt
+
 func main() {
+
 	r := gin.Default()
-	r.GET("/ping", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"message": "pong",
-		})
-	})
+	r.GET("/ping", Ping)
 	r.Run("0.0.0.0:8060")
 }
