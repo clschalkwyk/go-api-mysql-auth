@@ -6,10 +6,17 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"log"
+	"net/http"
 	"os"
 
 	_ "github.com/go-sql-driver/mysql"
 )
+
+type RegisterUserDto struct {
+	Email           string `json: "email"`
+	Password        string `json: "password"`
+	ConfirmPassword string `json: "confirmPassword"`
+}
 
 var mydb = ConnectDb()
 
@@ -51,6 +58,55 @@ func Ping(c *gin.Context) {
 	})
 }
 
+func ExistingUser(email string) bool {
+	var cnt int
+	if err := mydb.QueryRow("select count(1) cnt from users where email = ?", email).Scan(&cnt); err != nil {
+		if err == sql.ErrNoRows {
+			return false
+		}
+		log.Fatal(err)
+	}
+	return cnt > 0
+}
+
+func RegisterUser(c *gin.Context) {
+	data := RegisterUserDto{}
+	if err := c.BindJSON(&data); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+
+	if data.Password != data.ConfirmPassword {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+
+	if ExistingUser(data.Email) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"result":  "Error",
+			"message": "User exists",
+		})
+		return
+	}
+	q := "insert into users (email, password, salt) values(?, ?, 'salt')"
+	insert, err := mydb.Prepare(q)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = insert.Exec(data.Email, data.Password)
+	insert.Close()
+
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	fmt.Println(data)
+	c.JSON(http.StatusAccepted, gin.H{
+		"result":  "Success",
+		"message": "User registered",
+	})
+}
+
 // register user
 // login
 // generate jwt
@@ -60,5 +116,6 @@ func main() {
 
 	r := gin.Default()
 	r.GET("/ping", Ping)
+	r.POST("/register", RegisterUser)
 	r.Run("0.0.0.0:8060")
 }
