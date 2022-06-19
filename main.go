@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"golang.org/x/crypto/bcrypt"
 	"log"
 	"net/http"
 	"os"
@@ -41,6 +42,14 @@ func ConnectDb() *sql.DB {
 		log.Fatal(err)
 	}
 	return db
+}
+
+func hashPassword(pwd []byte) ([]byte, error) {
+	hash, err := bcrypt.GenerateFromPassword(pwd, bcrypt.MinCost)
+	if err != nil {
+		return nil, err
+	}
+	return hash, err
 }
 
 func Ping(c *gin.Context) {
@@ -88,7 +97,18 @@ func RegisterUser(c *gin.Context) {
 		})
 		return
 	}
-	q := "insert into users (email, password, salt) values(?, ?, 'salt')"
+
+	hashed, err := hashPassword([]byte(data.Password))
+	if err != nil {
+		log.Fatal(err)
+		c.JSON(http.StatusAccepted, gin.H{
+			"result":  "Failed",
+			"message": "Unable to register user",
+		})
+	}
+	data.Password = string(hashed)
+
+	q := "insert into users (email, password) values(?, ?)"
 	insert, err := mydb.Prepare(q)
 	if err != nil {
 		log.Fatal(err)
